@@ -31,9 +31,6 @@ class ExplainLISA:
         
 
     def saveLoadAndPrep(self,img,img_shape,scale):
-        import os
-        import io
-        import PIL.Image as Image
         import tensorflow as tf
         img = tf.io.read_file(img)
         
