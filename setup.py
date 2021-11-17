@@ -22,7 +22,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=long_description,
     packages=find_packages(),
-    install_requires=['opencv-python', 'tensorflow', 'numpy','pandas','matplotlib','alibi[ray]','lime','shap','skimage'],
+    install_requires=['opencv-python', 'tensorflow', 'numpy','pandas','matplotlib','alibi[ray]','lime','shap','scikit-image'],
     keywords=['LIME', 'Integrated gradients', 'SHAP', 'Anchors', 'Explainable AI', 'XAI','CNN Explainer'],
     classifiers=[
         "Development Status :: 0 - Testing",
