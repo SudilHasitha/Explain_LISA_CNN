@@ -35,7 +35,7 @@ class ExplainLISA:
         import io
         import PIL.Image as Image
         import tensorflow as tf
-        img = Image.open(io.BytesIO(img))
+        img = tf.io.read_file(img)
         
         # decode image into tensor
         img = tf.io.decode_image(img,channels=3) # hardcode for 3 channels to be compatible despite of the image type
