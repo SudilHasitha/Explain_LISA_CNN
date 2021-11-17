@@ -13,9 +13,12 @@ filter_radius: the pixel value of the radius of the High pass filter
 ```pip install ExplainLISA```
 
 ## How to use it?
-Open terminal and type python or python3
-``` import ExplainLISA ```
-``` ExplainLISA(img,class_names,img_shape,model,img1,img2,scale,filter_radius)```
+Open terminal and type python/python3 according to your OS.
+
+
+``` import ExplainLISA as e```
+``` e.ExplainLISA(img,class_names,img_shape,model,img1,img2,scale,filter_radius)```
+``` e.getExplanations()```
 
 ## License
 
