@@ -17,6 +17,7 @@ setup(
     version=VERSION,
     author="Sudil H.P Abeyagunasekera",
     author_email="<sudilhasithaa51@gmail.com>",
+    url="https://github.com/SudilHasitha/ExplainLISA",
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
     long_description=long_description,
