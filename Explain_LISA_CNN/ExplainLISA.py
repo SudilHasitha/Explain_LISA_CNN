@@ -24,8 +24,6 @@ class ExplainLISA:
         for i in [self.img1,self.img2,self.img]:
           self.img_list.append(i)
         self.filter_radius=filter_radius
-        
-    def getExplanations(self):
         self.ExplanationsObj=Explanations(self.img,self.model,list(self.class_names),self.img_list,int(self.img_shape),self.filter_radius)
         self.ExplanationsObj.callForMethods()
         
