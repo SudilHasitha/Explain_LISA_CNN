@@ -35,7 +35,6 @@ class ExplainLISA:
         import io
         import PIL.Image as Image
         import tensorflow as tf
-        img = img.read()
         img = Image.open(io.BytesIO(img))
         
         # decode image into tensor
