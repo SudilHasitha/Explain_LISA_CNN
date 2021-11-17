@@ -1,4 +1,4 @@
-from ExplainLISA.Explanations import Explanations
+from Explain_LISA.Explanations import Explanations
 
 class ExplainLISA:
     def __init__(self,img,class_names,img_shape,model,img1,img2,scale=True,filter_radius=10) -> None:

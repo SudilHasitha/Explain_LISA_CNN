@@ -7,13 +7,13 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '0.0.1'
+VERSION = '0.0.2'
 DESCRIPTION = 'Unified Explanation Provider For CNNs'
 LONG_DESCRIPTION = 'This package allows to get explantions for the predictions made by the CNNs using existing LIME, Integrated Gradients,SHAP and Anchors with newly introduced unifiying method in this package.'
 
 # Setting up
 setup(
-    name="ExplainLISA",
+    name="Explain_LISA",
     version=VERSION,
     author="Sudil H.P Abeyagunasekera",
     author_email="<sudilhasithaa51@gmail.com>",
