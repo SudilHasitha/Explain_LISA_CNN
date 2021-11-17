@@ -1,4 +1,4 @@
-from Explanations import Explanations
+from ExplainLISA.Explanations import Explanations
 
 class ExplainLISA:
     def __init__(self,img,class_names,img_shape,model,img1,img2,scale=True,filter_radius=10) -> None:
@@ -25,6 +25,7 @@ class ExplainLISA:
           self.img_list.append(i)
         self.filter_radius=filter_radius
         
+    def getExplanations(self):
         self.ExplanationsObj=Explanations(self.img,self.model,list(self.class_names),self.img_list,int(self.img_shape),self.filter_radius)
         self.ExplanationsObj.callForMethods()
         
