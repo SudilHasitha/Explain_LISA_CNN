@@ -25,7 +25,7 @@ setup(
     install_requires=['opencv-python', 'tensorflow', 'numpy','pandas','matplotlib','alibi[ray]','lime','shap','scikit-image'],
     keywords=['LIME', 'Integrated gradients', 'SHAP', 'Anchors', 'Explainable AI', 'XAI','CNN Explainer'],
     classifiers=[
-        "Development Status :: 0 - Testing",
+        "Development Status :: 1 - Planning",
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
         "Operating System :: Unix",
