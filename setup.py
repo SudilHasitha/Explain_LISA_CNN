@@ -13,7 +13,7 @@ LONG_DESCRIPTION = 'This package allows to get explantions for the predictions m
 
 # Setting up
 setup(
-    name="Explain_LISA_CNN",
+    name="Explain_LISA_CNN_test_23",
     version=VERSION,
     author="Sudil H.P Abeyagunasekera",
     author_email="<sudilhasithaa51@gmail.com>",

@@ -1,3 +1,18 @@
+import sys
+sys.path
+sys.executable
+import tensorflow as tf
+import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+import shap
+import matplotlib
+from alibi.explainers import AnchorImage
+from lime import lime_image
+from skimage.segmentation import mark_boundaries
+from alibi.explainers import IntegratedGradients
+from alibi.utils.visualization import visualize_image_attr          
+
 class Explanations:
     def __init__(self,img,model,class_names,img_list,img_shape=224,r=10) -> None:
         self.explanation_list={"Anchor":None,
@@ -16,12 +31,7 @@ class Explanations:
                             threshold=.95, p_sample=.5, tau=0.25,image_shape=(224,224,3)):
         
         global explanation_list
-        from alibi.explainers import AnchorImage
-        import numpy as np
-        import matplotlib
         matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-
 
         predict_fn = lambda x: model.predict(x)
         image = np.array(image)
@@ -47,11 +57,11 @@ class Explanations:
         plt.imshow(explanation.anchor)
         plt.axis('off')
         
-
         fig.add_subplot(rows, columns, 2)
         plt.imshow(explanation.segments)
         plt.axis('off')
-        
+        plt.savefig("AnchorSegmentation.png")
+        plt.clf()
         self.explanation_list["Anchor"]=explanation.anchor
         
 
@@ -73,13 +83,7 @@ class Explanations:
         """
         
         global explanation_list
-       
-        from lime import lime_image
-        from skimage.segmentation import mark_boundaries
-        import numpy as np
-        import matplotlib
         matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
 
         image=np.array(image,dtype=np.double)
         explainer = lime_image.LimeImageExplainer(random_state=42)
@@ -100,7 +104,8 @@ class Explanations:
                                                             num_features=num_features,min_weight=min_weight)
         plt.axis('off')
         plt.imshow(mark_boundaries(image, mask))
-
+        plt.savefig("LimeExplanation.png")
+        plt.clf()
         self.explanation_list["LIME"]=mask
         
 
@@ -109,14 +114,7 @@ class Explanations:
         
 
         global explanation_list
-        from alibi.explainers import IntegratedGradients
-        from alibi.utils.visualization import visualize_image_attr
-        import tensorflow as tf
-        import numpy as np
-        from PIL import Image
-        import matplotlib
         matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
         import tensorflow.python.ops.numpy_ops.np_config as np_config
         np_config.enable_numpy_behavior()
         tf.executing_eagerly()
@@ -142,24 +140,22 @@ class Explanations:
         plt.axis('off')
 
         visualize_image_attr(attr=None, original_image=(image * 255).astype(np.uint8), method='original_image',
-                            title=f'Prediction {prediction}, Actual {class_name}', plt_fig_axis=(fig, ax[0]), 
+                            title=f'Prediction {prediction}', plt_fig_axis=(fig, ax[0]), 
                             use_pyplot=False);
 
         visualize_image_attr(attr=attrs.squeeze(), original_image=image, method='blended_heat_map',
                             sign='all', show_colorbar=True, title='Overlaid Attributions',
                             plt_fig_axis=(fig, ax[1]), use_pyplot=True);
-     
+        fig.savefig("IGExplanation.png")
+        fig.clf()
         self.explanation_list["IG"]=attrs
         
 
     def Shape_Gradient_Explainer(self,model,images_list):
+ 
         global explanation_list
-        
-        import numpy as np
-        import shap
-        import matplotlib
+
         matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
         
         # get the length of the image list
         k = len(images_list)
@@ -173,14 +169,13 @@ class Explanations:
         
         print(len(shap_values))
         shap.image_plot(shap_values, images_list[0:k],width=60,aspect=0.1,hspace=0.1, show=False)
+        plt.savefig("SHAPExplanation.png")
+        plt.clf()
         self.explanation_list["SHAP"]=shap_values
         
        
     def FFT(self,img,dst,dst_I):
-        import numpy as np
-        import cv2
-        from matplotlib import pyplot as plt
-
+        
         # fft to convert the image to freq domain 
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -216,25 +211,31 @@ class Explanations:
         magnitude_spectrum = 20*np.log(np.abs(fshift))
         from matplotlib.pyplot import figure
         figure(num=None, figsize=(18, 16), dpi=80, facecolor='w', edgecolor='k')
+        
         plt.subplot(141),plt.imshow(magnitude_spectrum, cmap = 'gray')
         plt.title('magnitude_spectrum after filtering'), plt.xticks([]), plt.yticks([])
+
         plt.subplot(142),plt.imshow(img, cmap = 'gray')
         plt.title('Input Image'), plt.xticks([]), plt.yticks([])
+        
         plt.subplot(143),plt.imshow(img_back, cmap = 'gray')
         plt.title('Image after HPF'), plt.xticks([]), plt.yticks([])
-        plt.subplot(144),plt.imshow(dst)
+        
+        plt.subplot(144),plt.imshow(dst,cmap = 'gray')
         plt.title('LISA Explanation Union'), plt.xticks([]), plt.yticks([])
-        plt.subplot(241),plt.imshow(dst_I)
+        
+        plt.subplot(241),plt.imshow(dst_I,cmap = 'gray')
         plt.title('LISA Explanation Intersection'), plt.xticks([]), plt.yticks([])
-        plt.subplot(242),plt.imshow(img_back)
+        
+        plt.subplot(242),plt.imshow(img_back,cmap = 'gray')
         plt.title('LISA Explanation Boundary'), plt.xticks([]), plt.yticks([])
+        
         plt.show()
-
+        plt.savefig("LISAExplanation.png")
+        plt.clf()
 
     def LISA(self,input_image):
-        import numpy as np
-        import cv2
-
+      
         Anchor=self.explanation_list.get("Anchor")
         LIME=self.explanation_list.get("LIME")
         IG=self.explanation_list.get("IG")
@@ -308,21 +309,19 @@ class Explanations:
     
 
     def callForMethods(self):
+
         # get model prdictions
         pred_class= self.getPredictions()
-        self.anchor_explanations(7,20,0.5,self.image,self.model,"slic")
         self.LIME_explanations(self.model,self.image,pred_class,self.class_names,min_weight=0.05)
         self.integrated_Gradients(self.model,self.image,pred_class,self.pred_class)
         self.Shape_Gradient_Explainer(self.model,self.img_list)
+        self.anchor_explanations(7,20,0.5,self.image,self.model,"slic")
         self.LISA(self.image)
    
 
     def getPredictions(self):
-        import tensorflow as tf
-        import matplotlib.pyplot as plt
-        
+       
         pred_prob = self.model.predict(tf.expand_dims(self.image,axis=0))
         pred_class = self.class_names[pred_prob[0].argmax()]
         return pred_class
       
-    

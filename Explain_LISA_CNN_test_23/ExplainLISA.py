@@ -1,6 +1,12 @@
-from Explain_LISA_CNN.Explanations import Explanations
+import sys
+sys.path
+sys.executable
+import tensorflow as tf
+from IPython.display import Image, display
+from Explain_LISA_CNN_test_23.Explanations import Explanations
 
 class ExplainLISA:
+      
     def __init__(self,img,class_names,img_shape,model,img1,img2,scale=True,filter_radius=10) -> None:
         """
             img: local path of img to be explained
@@ -29,7 +35,7 @@ class ExplainLISA:
         
 
     def saveLoadAndPrep(self,img,img_shape,scale):
-        import tensorflow as tf
+        
         img = tf.io.read_file(img)
         
         # decode image into tensor
@@ -44,3 +50,15 @@ class ExplainLISA:
         else:
           return img
 
+    @staticmethod
+    def displayImages():
+     
+      listOfImageNames = ['SHAPExplanation.png',
+                          'IGExplanation.png',
+                          'LimeExplanation.png',
+                          'AnchorSegmentation.png',
+                          'LISAExplanation.png']
+
+      for imageName in listOfImageNames:
+          display(Image(filename=imageName))
+      
