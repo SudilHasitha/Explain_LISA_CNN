@@ -1,6 +1,8 @@
+#!/usr/bin/python3
 import sys
 sys.path
 sys.executable
+sys.modules
 import tensorflow as tf
 from IPython.display import Image, display
 
@@ -314,10 +316,10 @@ class Explanations:
 
         # get model prdictions
         pred_class= self.getPredictions()
-        self.LIME_explanations(self.model,self.image,pred_class,self.class_names,min_weight=0.05)
         self.integrated_Gradients(self.model,self.image,pred_class,self.pred_class)
         self.Shape_Gradient_Explainer(self.model,self.img_list)
         self.anchor_explanations(7,20,0.5,self.image,self.model,"slic")
+        self.LIME_explanations(self.model,self.image,pred_class,self.class_names,min_weight=0.05)
         self.LISA(self.image)
    
 

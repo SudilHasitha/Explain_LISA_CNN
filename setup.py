@@ -1,6 +1,11 @@
+#!/usr/bin/python3
 from setuptools import setup, find_packages
 import codecs
 import os
+import sys
+sys.path
+sys.executable
+sys.modules
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -13,7 +18,7 @@ LONG_DESCRIPTION = 'This package allows to get explantions for the predictions m
 
 # Setting up
 setup(
-    name="Explain_LISA_CNN_test_25",
+    name="Explain_LISA_CNN_test_28",
     version=VERSION,
     author="Sudil H.P Abeyagunasekera",
     author_email="<sudilhasithaa51@gmail.com>",
@@ -22,7 +27,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=long_description,
     packages=find_packages(),
-    install_requires=['opencv-python', 'tensorflow', 'numpy','pandas','matplotlib','lime','shap','alibi[ray]','scikit-image'],
+    install_requires=['opencv-python', 'tensorflow', 'numpy','pandas','matplotlib','scipy','lime','shap','alibi[ray]','scikit-image'],
     keywords=['LIME', 'Integrated gradients', 'SHAP', 'Anchors', 'Explainable AI', 'XAI','CNN Explainer'],
     classifiers=[
         "Development Status :: 1 - Planning",
