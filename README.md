@@ -16,8 +16,11 @@ filter_radius: the pixel value of the radius of the High pass filter
 Open terminal and type python/python3 according to your OS.
 
 
-``` import Explain_LISA_CNN_01 as e```
+``` import Explain_LISA_CNN_test_25 as e```  
+``` ```
 ``` e.ExplainLISA(img,class_names,img_shape,model,img1,img2,scale,filter_radius)```
+``` ```
+``` ExplainLISA.displayImages()```
 
 ## License
 
