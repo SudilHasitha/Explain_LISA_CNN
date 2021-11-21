@@ -10,17 +10,17 @@ scale: for manual image scaling if scaling layer absent in the model to be expla
 filter_radius: the pixel value of the radius of the High pass filter
 
 ## Installation
-```pip install Explain_LISA_CNN_Prediction```
+```pip install LISA_CNN_ExplainerV3```
 
 ## How to use it?
 Open terminal and type python/python3 according to your OS.
 
 
-``` import Explain_LISA_CNN_test_25 as e```  
-``` ```
-``` e.ExplainLISA(img,class_names,img_shape,model,img1,img2,scale,filter_radius)```
-``` ```
-``` ExplainLISA.displayImages()```
+``` import LISA_CNN_ExplainerV3 as e \n```  
+
+``` e.ExplainLISA(img,class_names,img_shape,model,img1,img2,scale,filter_radius) \n```
+
+``` e.displayImages() \n```
 
 ## License
 

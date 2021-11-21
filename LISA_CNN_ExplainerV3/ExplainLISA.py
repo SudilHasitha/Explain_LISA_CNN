@@ -1,11 +1,9 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 import sys
-sys.path
-sys.executable
-sys.modules
+sys.path.append("/usr/local/lib/python3.7/dist-packages/")
+
 import tensorflow as tf
 from IPython.display import Image, display
-
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
@@ -18,7 +16,7 @@ from alibi.explainers import IntegratedGradients
 from alibi.utils.visualization import visualize_image_attr          
 
 class Explanations:
-    def __init__(self,img,model,class_names,img_list,img_shape=224,r=10) -> None:
+    def __init__(self,img,model,pred_class,img_list,img_shape=224,r=10) -> None:
         self.explanation_list={"Anchor":None,
                     "LIME":None,
                     "IG":None,
@@ -27,9 +25,8 @@ class Explanations:
         self.image = img
         self.img_list = img_list
         self.img_shape = img_shape
-        self.class_names = class_names
+        self.pred_class = pred_class
         self.r = r
-        self.pred_class = self.getPredictions()
 
     def anchor_explanations(self,n_segments,compactness,sigma,image,model,segmentation_fn="slic",
                             threshold=.95, p_sample=.5, tau=0.25,image_shape=(224,224,3)):
@@ -70,7 +67,7 @@ class Explanations:
         
 
 
-    def LIME_explanations(self,model,image,prediction,class_name=None,positive_only=True,num_features=10000,
+    def LIME_explanations(self,model,image,prediction,positive_only=True,num_features=10000,
                         hide_rest=False,min_weight=0.1, hide_color=None, num_samples=None):
         """
             model:CNN
@@ -94,7 +91,7 @@ class Explanations:
 
         explanation = explainer.explain_instance(image, model.predict, hide_color, num_samples)
         
-        plt.title(f"Prediction: {prediction} Actual: {class_name}")
+        plt.title(f"Prediction: {prediction}")
         
         plt.imshow((image * 255).astype(np.uint8))
          
@@ -113,7 +110,7 @@ class Explanations:
         self.explanation_list["LIME"]=mask
         
 
-    def integrated_Gradients(self,model,img,prediction,class_name="Not given",n_steps=20,internal_batch_size=20,
+    def integrated_Gradients(self,model,img,prediction,n_steps=20,internal_batch_size=20,
                              Random_baseline=False,method = "gausslegendre",Scale_Factor=1):
         
 
@@ -314,26 +311,17 @@ class Explanations:
 
     def callForMethods(self):
 
-        # get model prdictions
-        pred_class= self.getPredictions()
-        self.integrated_Gradients(self.model,self.image,pred_class,self.pred_class)
+        self.integrated_Gradients(self.model,self.image,self.pred_class)
         self.Shape_Gradient_Explainer(self.model,self.img_list)
         self.anchor_explanations(7,20,0.5,self.image,self.model,"slic")
-        self.LIME_explanations(self.model,self.image,pred_class,self.class_names,min_weight=0.05)
+        self.LIME_explanations(self.model,self.image,self.pred_class,min_weight=0.05)
         self.LISA(self.image)
-   
-
-    def getPredictions(self):
-       
-        pred_prob = self.model.predict(tf.expand_dims(self.image,axis=0))
-        pred_class = self.class_names[pred_prob[0].argmax()]
-        return pred_class
       
 
 
 class ExplainLISA:
       
-    def __init__(self,img,class_names,img_shape,model,img1,img2,scale=True,filter_radius=10) -> None:
+    def __init__(self,img,pred_class,img_shape,model,img1,img2,scale=True,filter_radius=10) -> None:
         """
             img: local path of img to be explained
             class_names: the classes available as predictions for a given model
@@ -349,15 +337,16 @@ class ExplainLISA:
         self.img1 = self.saveLoadAndPrep(img1,int(img_shape),scale)
         self.img2 = self.saveLoadAndPrep(img2,int(img_shape),scale)
         self.model = model
-        self.class_names = class_names
+        self.pred_class = pred_class
         self.img_shape = int(img_shape)
         self.img_list = []
         self.results = []
         for i in [self.img1,self.img2,self.img]:
           self.img_list.append(i)
         self.filter_radius=filter_radius
-        self.ExplanationsObj=Explanations(self.img,self.model,list(self.class_names),self.img_list,int(self.img_shape),self.filter_radius)
+        self.ExplanationsObj=Explanations(self.img,self.model,self.pred_class,self.img_list,int(self.img_shape),self.filter_radius)
         self.ExplanationsObj.callForMethods()
+        self.displayImages()
         
 
     def saveLoadAndPrep(self,img,img_shape,scale):
@@ -376,15 +365,13 @@ class ExplainLISA:
         else:
           return img
 
-    @staticmethod
-    def displayImages():
-     
-      listOfImageNames = ['SHAPExplanation.png',
+
+    def displayImages(self):     
+      self.listOfImageNames = ['SHAPExplanation.png',
                           'IGExplanation.png',
                           'LimeExplanation.png',
                           'AnchorSegmentation.png',
                           'LISAExplanation.png']
 
-      for imageName in listOfImageNames:
+      for imageName in self.listOfImageNames:
           display(Image(filename=imageName))
-      
