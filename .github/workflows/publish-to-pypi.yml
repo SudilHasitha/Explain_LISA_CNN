@@ -1,0 +1,37 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+    - name: Check if merge from release branch
+      id: check_release
+      run: |
+        if [[ ${{ github.event.before }} =~ ^refs/heads/release-v ]]; then
+          echo "::set-output name=is_release::true"
+        else
+          echo "::set-output name=is_release::false"
+        fi
+    - name: Install dependencies
+      if: steps.check_release.outputs.is_release == 'true'
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools wheel twine
+    - name: Build and publish
+      if: steps.check_release.outputs.is_release == 'true'
+      env:
+        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        python setup.py sdist bdist_wheel
+        twine upload dist/*

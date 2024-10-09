@@ -1,26 +1,69 @@
-# Explain LISA
-It takes the following.
-img: local path of img to be explained
-class_names: the classes available as predictions for the given model
-img_shape: shape of the image accepts by the neural network
-model: the model to be explained get from tf.keras.models.load_model("your model path")
-img1: local path background data point for produce explanations with SHAP
-img2: local path background data point for produce explanations with SHAP
-scale: for manual image scaling if scaling layer absent in the model to be explained 
-filter_radius: the pixel value of the radius of the High pass filter
+# LISA CNN Explainer V3
+
+LISA CNN Explainer V3 is a tool for explaining CNN predictions using multiple explainability methods.
 
 ## Installation
-```pip install LISA_CNN_ExplainerV3```
 
-## How to use it?
-Open terminal and type python/python3 according to your OS.
+```
+pip install LISA_CNN_ExplainerV3
+```
 
+## Usage
 
-``` import LISA_CNN_ExplainerV3 as e \n```  
+To use LISA CNN Explainer V3, follow these steps:
 
-``` e.ExplainLISA(img,class_names,img_shape,model,img1,img2,scale,filter_radius) \n```
+1. Import the package:
 
-``` e.displayImages() \n```
+```python
+from LISA_CNN_ExplainerV3 import ExplainLISA
+```
+
+2. Load your model:
+
+```python
+import tensorflow as tf
+model = tf.keras.models.load_model("path/to/your/model.h5")
+```
+
+3. Create an ExplainLISA instance and run the explanation:
+
+```python
+explainer = ExplainLISA(
+    img="path/to/image.jpg",
+    pred_class="Unknown",
+    img_shape=224,
+    model=model,
+    img1="path/to/background_image1.jpg",
+    img2="path/to/background_image2.jpg",
+    scale=True,
+    filter_radius=10
+)
+explainer.explain()
+```
+
+Parameters:
+- `img`: Path to the image to be explained
+- `pred_class`: Predicted class (can be "Unknown" if not known)
+- `img_shape`: Shape of the image accepted by the neural network
+- `model`: The model to be explained
+- `img1` and `img2`: Paths to background data points for SHAP explanations
+- `scale`: Whether to scale the image (set to False if your model includes a scaling layer)
+- `filter_radius`: Pixel value of the radius of the high-pass filter
+
+4. The explanation results will be saved as image files in your current directory:
+   - AnchorSegmentation.png
+   - LimeExplanation.png
+   - IGExplanation.png
+   - SHAPExplanation.png
+   - LISAExplanation.png
+
+## Command-line Usage
+
+You can also use LISA CNN Explainer V3 from the command line:
+
+```
+python -m LISA_CNN_ExplainerV3.ExplainLISA --img path/to/image.jpg --model path/to/model.h5 --img_shape 224 --filter_radius 10
+```
 
 ## License
 

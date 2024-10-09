@@ -1,377 +1,217 @@
-#!/usr/bin/env python
-import sys
-sys.path.append("/usr/local/lib/python3.7/dist-packages/")
-
 import tensorflow as tf
-from IPython.display import Image, display
 import numpy as np
 import cv2
-from matplotlib import pyplot as plt
+import matplotlib.pyplot as plt
 import shap
-import matplotlib
-from alibi.explainers import AnchorImage
+from alibi.explainers import AnchorImage, IntegratedGradients
 from lime import lime_image
 from skimage.segmentation import mark_boundaries
-from alibi.explainers import IntegratedGradients
-from alibi.utils.visualization import visualize_image_attr          
+from alibi.utils.visualization import visualize_image_attr
+import logging
 
-class Explanations:
-    def __init__(self,img,model,pred_class,img_list,img_shape=224,r=10) -> None:
-        self.explanation_list={"Anchor":None,
-                    "LIME":None,
-                    "IG":None,
-                    "SHAP":None}
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class BaseExplainer:
+    def __init__(self, model, image, img_shape=224):
         self.model = model
-        self.image = img
+        self.image = image
+        self.img_shape = img_shape
+
+    def preprocess_image(self):
+        return np.array(self.image, dtype=np.double)
+
+class AnchorExplainer(BaseExplainer):
+    def explain(self, n_segments, compactness, sigma, threshold=.95, p_sample=.5, tau=0.25):
+        try:
+            predict_fn = lambda x: self.model.predict(x)
+            image = np.array(self.image)
+            explainer = AnchorImage(predict_fn, image_shape=self.img_shape, segmentation_fn='slic',
+                                    segmentation_kwargs={'n_segments': n_segments, 'compactness': compactness, 'sigma': sigma})
+            explanation = explainer.explain(image, threshold=threshold, p_sample=p_sample, tau=tau)
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 7))
+            ax1.imshow(explanation.anchor)
+            ax1.axis('off')
+            ax2.imshow(explanation.segments)
+            ax2.axis('off')
+            plt.savefig("AnchorSegmentation.png")
+            plt.close(fig)
+            
+            return explanation.anchor
+        except Exception as e:
+            logger.error(f"Error in Anchor explanation: {str(e)}")
+            return None
+
+class LIMEExplainer(BaseExplainer):
+    def explain(self, prediction, positive_only=True, num_features=10000, hide_rest=False, min_weight=0.1):
+        try:
+            image = np.array(self.image, dtype=np.double)
+            explainer = lime_image.LimeImageExplainer(random_state=42)
+            explanation = explainer.explain_instance(image, self.model.predict, hide_color=0, num_samples=1000)
+            
+            image, mask = explanation.get_image_and_mask(
+                self.model.predict(image.reshape((1, self.img_shape, self.img_shape, 3))).argmax(axis=1)[0],
+                positive_only=positive_only, hide_rest=hide_rest, num_features=num_features, min_weight=min_weight
+            )
+            
+            plt.figure(figsize=(10, 5))
+            plt.imshow(mark_boundaries(image, mask))
+            plt.axis('off')
+            plt.title(f"Prediction: {prediction}")
+            plt.savefig("LimeExplanation.png")
+            plt.close()
+            
+            return mask
+        except Exception as e:
+            logger.error(f"Error in LIME explanation: {str(e)}")
+            return None
+
+class IGExplainer(BaseExplainer):
+    def explain(self, prediction, n_steps=20, internal_batch_size=20, method="gausslegendre"):
+        try:
+            ig = IntegratedGradients(self.model, n_steps=n_steps, method=method, internal_batch_size=internal_batch_size)
+            instance = np.expand_dims(self.image, axis=0)
+            explanation = ig.explain(instance, baselines=None, target=self.model(instance).numpy().argmax(axis=1))
+            
+            attrs = explanation.attributions[0].squeeze()
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
+            visualize_image_attr(None, self.image, method='original_image', title=f'Prediction {prediction}', plt_fig_axis=(fig, ax1), use_pyplot=False)
+            visualize_image_attr(attrs, self.image, method='blended_heat_map', sign='all', show_colorbar=True, title='Overlaid Attributions', plt_fig_axis=(fig, ax2), use_pyplot=True)
+            fig.savefig("IGExplanation.png")
+            plt.close(fig)
+            
+            return attrs
+        except Exception as e:
+            logger.error(f"Error in Integrated Gradients explanation: {str(e)}")
+            return None
+
+class SHAPExplainer(BaseExplainer):
+    def explain(self, images_list):
+        try:
+            images_list = np.array(images_list)
+            explainer = shap.GradientExplainer(self.model, images_list)
+            shap_values = explainer.shap_values(images_list[0:len(images_list)])
+            
+            shap.image_plot(shap_values, images_list, show=False)
+            plt.savefig("SHAPExplanation.png")
+            plt.close()
+            
+            return shap_values
+        except Exception as e:
+            logger.error(f"Error in SHAP explanation: {str(e)}")
+            return None
+
+class LISAExplainer:
+    def __init__(self, model, image, pred_class, img_list, img_shape=224, filter_radius=10):
+        self.model = model
+        self.image = image
+        self.pred_class = pred_class
         self.img_list = img_list
         self.img_shape = img_shape
-        self.pred_class = pred_class
-        self.r = r
+        self.filter_radius = filter_radius
+        self.explanations = {}
 
-    def anchor_explanations(self,n_segments,compactness,sigma,image,model,segmentation_fn="slic",
-                            threshold=.95, p_sample=.5, tau=0.25,image_shape=(224,224,3)):
-        
-        global explanation_list
-        matplotlib.use('Agg')
+    def explain(self):
+        self.explanations['Anchor'] = AnchorExplainer(self.model, self.image, self.img_shape).explain(7, 20, 0.5)
+        self.explanations['LIME'] = LIMEExplainer(self.model, self.image, self.img_shape).explain(self.pred_class)
+        self.explanations['IG'] = IGExplainer(self.model, self.image, self.img_shape).explain(self.pred_class)
+        self.explanations['SHAP'] = SHAPExplainer(self.model, self.image, self.img_shape).explain(self.img_list)
 
-        predict_fn = lambda x: model.predict(x)
-        image = np.array(image)
-        #felzenszwalb, slic and quick shift
-        # not for felzenszwalb 
-        if segmentation_fn == "slic":
-            kwargs = {'n_segments': n_segments, 'compactness': compactness, 'sigma': sigma}
-            explainer = AnchorImage(predict_fn, image_shape=image_shape, segmentation_fn=segmentation_fn,
-                                    segmentation_kwargs=kwargs, images_background=None)
-        else:
-            explainer = AnchorImage(predict_fn, image_shape=image_shape, segmentation_fn=segmentation_fn,
-                                    images_background=None)
-        np.random.seed(0)
-        explanation = explainer.explain(image, threshold, p_sample, tau)
-        
+    def combine_explanations(self):
+        try:
+            # Combine explanations (simplified version of the original LISA method)
+            combined_mask = np.zeros((self.img_shape, self.img_shape, 3), dtype=np.float32)
+            
+            if self.explanations['SHAP'] is not None:
+                shap_mask = np.where(self.explanations['SHAP'][0][2] > 0, 1, 0)
+                combined_mask[:,:,0] += shap_mask
+            
+            if self.explanations['LIME'] is not None:
+                combined_mask[:,:,1] += self.explanations['LIME']
+            
+            if self.explanations['IG'] is not None:
+                combined_mask[:,:,2] += np.mean(np.abs(self.explanations['IG']), axis=-1)
+            
+            if self.explanations['Anchor'] is not None:
+                anchor_mask = cv2.cvtColor(self.explanations['Anchor'], cv2.COLOR_BGR2GRAY)
+                combined_mask[:,:,0] += anchor_mask
+                combined_mask[:,:,1] += anchor_mask
+            
+            self.combined_mask = combined_mask / np.max(combined_mask)
+            
+        except Exception as e:
+            logger.error(f"Error in combining explanations: {str(e)}")
 
-        fig = plt.figure(figsize=(10, 7))
-        # setting values to rows and column variables
-        rows = 1
-        columns = 2
-
-        fig.add_subplot(rows, columns, 1)
-        plt.imshow(explanation.anchor)
-        plt.axis('off')
-        
-        fig.add_subplot(rows, columns, 2)
-        plt.imshow(explanation.segments)
-        plt.axis('off')
-        plt.savefig("AnchorSegmentation.png")
-        plt.clf()
-        self.explanation_list["Anchor"]=explanation.anchor
-        
-
-
-    def LIME_explanations(self,model,image,prediction,positive_only=True,num_features=10000,
-                        hide_rest=False,min_weight=0.1, hide_color=None, num_samples=None):
-        """
-            model:CNN
-            image:The image that we want LIME to explain.
-            prediction:Your image classier prediction.
-            class_name:Real Prediction if avaiable
-            num_samples:to determine the amount of artificial data points similar to our input that will be generated by LIME.
-            hide_color: is the color for a superpixel turned OFF. Alternatively, if it is NONE, the superpixel will be replaced by the average of its pixels. 
-                        (in the representation used by inception model, 0 means gray)
-            positive_only:Bool show only the positive part
-            num_features:Number of features in the positive need to show
-            hide_rest:Bool rest of the image need to hide or not
-            min_weight: such as 0.1 to be taken as value for the prediction
-        """
-        
-        global explanation_list
-        matplotlib.use('Agg')
-
-        image=np.array(image,dtype=np.double)
-        explainer = lime_image.LimeImageExplainer(random_state=42)
-
-        explanation = explainer.explain_instance(image, model.predict, hide_color, num_samples)
-        
-        plt.title(f"Prediction: {prediction}")
-        
-        plt.imshow((image * 255).astype(np.uint8))
-         
-        if positive_only==False and hide_rest==False:
-            image, mask = explanation.get_image_and_mask(model.predict(image.reshape((1,224,224,3))).argmax(axis=1)[0],
-                                                            positive_only=positive_only,hide_rest=hide_rest,
-                                                            num_features=num_features,min_weight=min_weight)
-        else:
-            image, mask = explanation.get_image_and_mask(model.predict(image.reshape((1,224,224,3))).argmax(axis=1)[0],
-                                                            positive_only=positive_only,hide_rest=hide_rest,
-                                                            num_features=num_features,min_weight=min_weight)
-        plt.axis('off')
-        plt.imshow(mark_boundaries(image, mask))
-        plt.savefig("LimeExplanation.png")
-        plt.clf()
-        self.explanation_list["LIME"]=mask
-        
-
-    def integrated_Gradients(self,model,img,prediction,n_steps=20,internal_batch_size=20,
-                             Random_baseline=False,method = "gausslegendre",Scale_Factor=1):
-        
-
-        global explanation_list
-        matplotlib.use('Agg')
-        import tensorflow.python.ops.numpy_ops.np_config as np_config
-        np_config.enable_numpy_behavior()
-        tf.executing_eagerly()
-
-        ig  = IntegratedGradients(model,n_steps=n_steps,method=method,internal_batch_size=internal_batch_size)
-
-        instance = np.expand_dims(img, axis=0)
-        if Random_baseline:
-            baselines = np.random.random_sample(instance.shape)
-        else:
-            baselines=None
-
-        predictions = model(instance).numpy().argmax(axis=1)
-
-        image = np.array(img)
-        explanation = ig.explain(instance,baselines=baselines,target=predictions)
-        
-        attrs = explanation.attributions[0]
-        
-        # scaling attribute values
-        attrs = attrs.squeeze()*Scale_Factor
-        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
-        plt.axis('off')
-
-        visualize_image_attr(attr=None, original_image=(image * 255).astype(np.uint8), method='original_image',
-                            title=f'Prediction {prediction}', plt_fig_axis=(fig, ax[0]), 
-                            use_pyplot=False);
-
-        visualize_image_attr(attr=attrs.squeeze(), original_image=image, method='blended_heat_map',
-                            sign='all', show_colorbar=True, title='Overlaid Attributions',
-                            plt_fig_axis=(fig, ax[1]), use_pyplot=True);
-        fig.savefig("IGExplanation.png")
-        fig.clf()
-        self.explanation_list["IG"]=attrs
-        
-
-    def Shape_Gradient_Explainer(self,model,images_list):
- 
-        global explanation_list
-
-        matplotlib.use('Agg')
-        
-        # get the length of the image list
-        k = len(images_list)
-
-        # since we have two inputs we pass a list of inputs to the explainer
-        images_list = np.array(images_list)  
-        explainer = shap.GradientExplainer(model,images_list)
-
-        # we explain the model's predictions on the first three samples of the test set
-        shap_values = explainer.shap_values(images_list[0:k])
-        
-        print(len(shap_values))
-        shap.image_plot(shap_values, images_list[0:k],width=60,aspect=0.1,hspace=0.1, show=False)
-        plt.savefig("SHAPExplanation.png")
-        plt.clf()
-        self.explanation_list["SHAP"]=shap_values
-        
-       
-    def FFT(self,img,dst,dst_I):
-        
-        # fft to convert the image to freq domain 
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # fft to convert the image to freq domain 
-        f = np.fft.fft2(img)
-
-        # shift the center
-        fshift = np.fft.fftshift(f)
-
-        rows, cols = img.shape
-        crow,ccol = int(rows/2) , int(cols/2)
-
-        # remove the low frequencies by masking with a rectangular window of size 60x60
-        # High Pass Filter (HPF)
-        rows, cols = img.shape
-        crow, ccol = int(rows / 2), int(cols / 2)
-
-        mask = np.ones((rows, cols), np.uint8)
-        center = [crow, ccol]
-        x, y = np.ogrid[:rows, :cols]
-        mask_area = (x - center[0]) ** 2 + (y - center[1]) ** 2 <= self.r*self.r
-        mask[mask_area] = 0
-        fshift = fshift * mask
-
-        # shift back (we shifted the center before)
-        f_ishift = np.fft.ifftshift(fshift)
-
-        # inverse fft to get the image back 
-        img_back = np.fft.ifft2(f_ishift)
-
-        img_back = np.abs(img_back)
-
-        magnitude_spectrum = 20*np.log(np.abs(fshift))
-        from matplotlib.pyplot import figure
-        figure(num=None, figsize=(18, 16), dpi=80, facecolor='w', edgecolor='k')
-        
-        plt.subplot(141),plt.imshow(magnitude_spectrum, cmap = 'gray')
-        plt.title('magnitude_spectrum after filtering'), plt.xticks([]), plt.yticks([])
-
-        plt.subplot(142),plt.imshow(img, cmap = 'gray')
-        plt.title('Input Image'), plt.xticks([]), plt.yticks([])
-        
-        plt.subplot(143),plt.imshow(img_back, cmap = 'gray')
-        plt.title('Image after HPF'), plt.xticks([]), plt.yticks([])
-        
-        plt.subplot(144),plt.imshow(dst,cmap = 'gray')
-        plt.title('LISA Explanation Union'), plt.xticks([]), plt.yticks([])
-        
-        plt.subplot(241),plt.imshow(dst_I,cmap = 'gray')
-        plt.title('LISA Explanation Intersection'), plt.xticks([]), plt.yticks([])
-        
-        plt.subplot(242),plt.imshow(img_back,cmap = 'gray')
-        plt.title('LISA Explanation Boundary'), plt.xticks([]), plt.yticks([])
-        
-        plt.show()
-        plt.savefig("LISAExplanation.png")
-        plt.clf()
-
-    def LISA(self,input_image):
-      
-        Anchor=self.explanation_list.get("Anchor")
-        LIME=self.explanation_list.get("LIME")
-        IG=self.explanation_list.get("IG")
-        SHAP=self.explanation_list.get("SHAP")
- 
-        # # SHAP
-        # Convert SHAP to numpy array
-        SHAP_np = np.array(SHAP)
-        
-        # Access the shaply value of explained image
-        # SHAP_np[0][2]
-        SHAP_np_target = SHAP_np[0][2]
-        
-        # extract positive shape values
-        SHAP_np_target_positive = np.where(SHAP_np_target>0,SHAP_np_target,0)
-        SHAP_np_target_positive_replace = SHAP_np_target_positive.copy()
-        # get the shape value if any present in R or B pixcel line which are positive shapley values and replace with G
-        SHAP_np_target_positive_replace = np.where(((SHAP_np_target_positive_replace[...,0]>0).any() | 
-                                                    (SHAP_np_target_positive_replace[...,1]>0).any() | 
-                                                    (SHAP_np_target_positive_replace[...,2]>0).any())
-                                                    ,SHAP_np_target_positive_replace[...,1],0)
-        
-        # using opencv
-        # convert to cv2 gray scale images
-        im_shap = np.array(SHAP_np_target_positive_replace * 255, dtype = np.uint8)
-        threshed_shap = cv2.adaptiveThreshold(im_shap, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 3, 0)
-        
-        # Add colour to shap
-        img_shap = np.zeros((224,224,3),dtype = np.float32)
-        img_shap[:,:,0]=threshed_shap* 255./255. 
-        img_shap[:,:,1]=threshed_shap* 0/255.
-        img_shap[:,:,2]=threshed_shap* 0/255.
-
-        # Apply green color mask to lime explanations
-        im_lime = np.array(LIME * 255, dtype = np.uint8)
-        # create 3 channel image
-        img_lime = np.zeros((224,224,3),dtype = np.float32)
-        img_lime[:,:,0]=im_lime*0/255.
-        img_lime[:,:,1]=im_lime*255./255.
-        img_lime[:,:,2]=im_lime*0/255.
-        
-        im_IG=np.array(IG, dtype = np.uint8)
-        gray_IG = cv2.cvtColor(im_IG, cv2.COLOR_BGR2GRAY)
-        # create 3 channel image
-        img_IG = np.zeros((224,224,3),dtype = np.float32)
-        img_IG[:,:,0]=gray_IG*0/255.
-        img_IG[:,:,1]=gray_IG*0/255.
-        img_IG[:,:,2]=gray_IG*1.
-        
-        #Anchor
-        Anchor_np = np.array(Anchor, dtype = np.uint8)
-        gray_Anchor = cv2.cvtColor(Anchor_np, cv2.COLOR_BGR2GRAY)
-        threshed_anchor = cv2.adaptiveThreshold(gray_Anchor, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 3, 0)
-        
-        img_anchor = np.zeros((224,224,3),dtype = np.float32)
-        img_anchor[:,:,0]=threshed_anchor*255./255.
-        img_anchor[:,:,1]=threshed_anchor*223./255.
-        img_anchor[:,:,2]=threshed_anchor*0/255.
-
-        mask = img_shap + img_lime + img_IG  + img_anchor
-        # normalize the mask
-        img_mask = (mask/np.float(np.max(mask)) )*255.
-
-        # open cv alpha blending with weights
-        # convert input image to array
-        input_image_array = np.array(input_image*255.,dtype=np.float32)
-
-        dst = cv2.addWeighted(input_image_array, 1, img_mask, 0.8, 0)
-        dst_I = cv2.bitwise_and(input_image_array,img_mask,input_image_array)
-        self.FFT(input_image_array,dst,dst_I)
-    
-
-    def callForMethods(self):
-
-        self.integrated_Gradients(self.model,self.image,self.pred_class)
-        self.Shape_Gradient_Explainer(self.model,self.img_list)
-        self.anchor_explanations(7,20,0.5,self.image,self.model,"slic")
-        self.LIME_explanations(self.model,self.image,self.pred_class,min_weight=0.05)
-        self.LISA(self.image)
-      
-
+    def visualize(self):
+        try:
+            input_image_array = np.array(self.image * 255., dtype=np.float32)
+            
+            dst = cv2.addWeighted(input_image_array, 1, self.combined_mask * 255, 0.8, 0)
+            dst_I = cv2.bitwise_and(input_image_array, self.combined_mask * 255, input_image_array)
+            
+            fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+            ax1.imshow(self.image)
+            ax1.set_title('Original Image')
+            ax1.axis('off')
+            
+            ax2.imshow(dst / 255.)
+            ax2.set_title('LISA Explanation (Overlay)')
+            ax2.axis('off')
+            
+            ax3.imshow(dst_I / 255.)
+            ax3.set_title('LISA Explanation (Masked)')
+            ax3.axis('off')
+            
+            plt.savefig("LISAExplanation.png")
+            plt.close(fig)
+            
+        except Exception as e:
+            logger.error(f"Error in visualization: {str(e)}")
 
 class ExplainLISA:
-      
-    def __init__(self,img,pred_class,img_shape,model,img1,img2,scale=True,filter_radius=10) -> None:
-        """
-            img: local path of img to be explained
-            class_names: the classes available as predictions for a given model
-            img_shape: shape of the image accept by the neural network
-            model: the model to be explained get from tf.keras.models.load_model("your model path")
-            img1: local path background data point for produce explanations with SHAP
-            img2: local path background data point for produce explanations with SHAP
-            scale: for manual image scaling if scaling layer absent in the model to be explained 
-            filter_radius: the pixel value of the radius of the High pass filter
-        """
-        
-        self.img = self.saveLoadAndPrep(img,int(img_shape),scale)
-        self.img1 = self.saveLoadAndPrep(img1,int(img_shape),scale)
-        self.img2 = self.saveLoadAndPrep(img2,int(img_shape),scale)
+    def __init__(self, img, pred_class, img_shape, model, img1, img2, scale=True, filter_radius=10):
+        self.img = self.save_load_and_prep(img, int(img_shape), scale)
+        self.img1 = self.save_load_and_prep(img1, int(img_shape), scale)
+        self.img2 = self.save_load_and_prep(img2, int(img_shape), scale)
         self.model = model
         self.pred_class = pred_class
         self.img_shape = int(img_shape)
-        self.img_list = []
-        self.results = []
-        for i in [self.img1,self.img2,self.img]:
-          self.img_list.append(i)
-        self.filter_radius=filter_radius
-        self.ExplanationsObj=Explanations(self.img,self.model,self.pred_class,self.img_list,int(self.img_shape),self.filter_radius)
-        self.ExplanationsObj.callForMethods()
-        self.displayImages()
-        
+        self.img_list = [self.img1, self.img2, self.img]
+        self.filter_radius = filter_radius
+        self.lisa_explainer = LISAExplainer(self.model, self.img, self.pred_class, self.img_list, self.img_shape, self.filter_radius)
 
-    def saveLoadAndPrep(self,img,img_shape,scale):
-        
-        img = tf.io.read_file(img)
-        
-        # decode image into tensor
-        img = tf.io.decode_image(img,channels=3) # hardcode for 3 channels to be compatible despite of the image type
+    def explain(self):
+        try:
+            self.lisa_explainer.explain()
+            self.lisa_explainer.combine_explanations()
+            self.lisa_explainer.visualize()
+        except Exception as e:
+            logger.error(f"An error occurred during explanation: {str(e)}")
 
-        # resize the image
-        img = tf.image.resize(img,[img_shape,img_shape])
+    @staticmethod
+    def save_load_and_prep(img, img_shape, scale):
+        try:
+            img = tf.io.read_file(img)
+            img = tf.io.decode_image(img, channels=3)
+            img = tf.image.resize(img, [img_shape, img_shape])
+            return img / 255. if scale else img
+        except Exception as e:
+            logger.error(f"Error in image preprocessing: {str(e)}")
+            return None
 
-        # Scale Y/N
-        if scale:
-          return img/255.
-        else:
-          return img
+# Usage example
+if __name__ == "__main__":
+    import argparse
 
+    parser = argparse.ArgumentParser(description='LISA CNN Explainer')
+    parser.add_argument('--img', type=str, required=True, help='Path to the image to explain')
+    parser.add_argument('--model', type=str, required=True, help='Path to the trained model')
+    parser.add_argument('--img_shape', type=int, default=224, help='Image shape')
+    parser.add_argument('--filter_radius', type=int, default=10, help='Filter radius')
+    args = parser.parse_args()
 
-    def displayImages(self):     
-      self.listOfImageNames = ['SHAPExplanation.png',
-                          'IGExplanation.png',
-                          'LimeExplanation.png',
-                          'AnchorSegmentation.png',
-                          'LISAExplanation.png']
-
-      for imageName in self.listOfImageNames:
-          display(Image(filename=imageName))
+    model = tf.keras.models.load_model(args.model)
+    explainer = ExplainLISA(args.img, "Unknown", args.img_shape, model, args.img, args.img, filter_radius=args.filter_radius)
+    explainer.explain()
