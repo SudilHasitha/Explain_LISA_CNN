@@ -23,20 +23,19 @@ setup(
     long_description=long_description,
     packages=find_packages(),
     install_requires=[
-        'tensorflow',
-        'opencv-python',
-        'numpy',
-        'matplotlib',
-        'shap',
-        'alibi',
-        'lime',
-        'scikit-image'
+        'tensorflow>=2.14.0',
+        'opencv-python>=4.8.0',
+        'numpy>=1.26.0',
+        'matplotlib>=3.8.0',
+        'scikit-image>=0.22.0',
+        'transformers>=4.35.0',
+        'tf-keras>=2.15.0'
     ],
     keywords=['LIME', 'Integrated gradients', 'SHAP', 'Anchors', 'Explainable AI', 'XAI', 'CNN Explainer', 'LISA'],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
-        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12",
         "Operating System :: OS Independent",
     ]
 )
